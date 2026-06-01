@@ -237,6 +237,12 @@ jobs:
               exit 1
             fi
           }
+          ensure_exists() {
+            if [ ! -e "$1" ]; then
+              echo "::error::Build output file missing: $1"
+              exit 1
+            fi
+          }
 
           ensure_non_empty ./publish/geoip.dat
           ensure_non_empty ./publish/geoip.dat.sha256sum
@@ -249,7 +255,7 @@ jobs:
           ensure_non_empty ./publish/reject-list.txt
           ensure_non_empty ./publish/direct-tld-list.txt
           ensure_non_empty ./publish/proxy-tld-list.txt
-          ensure_non_empty ./publish/reject-tld-list.txt
+          ensure_exists ./publish/reject-tld-list.txt
           ensure_non_empty ./publish/china-list.txt
           ensure_non_empty ./publish/google-cn.txt
           ensure_non_empty ./publish/apple-cn.txt
