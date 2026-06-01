@@ -1,67 +1,66 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
 import sys
-print(sys.argv[1], sys.argv[2])
 
-''' Find redundant items in domain lists.
-    e.g. 'bar.foo.com' is redundant for 'foo.com'.
-'''
 
-def load(list):
-    ''' Parse conf file & Prepare data structure
-        Returns: [ ['abc', 'com'],
-                   ['bar', 'foo', 'com'],
-                   ... ]
-    '''
+"""Find redundant items in domain lists.
 
+For example, ``bar.foo.com`` is redundant when ``foo.com`` already exists.
+"""
+
+
+def load_domains(path):
     results = []
-    with open(list, 'r') as f:
-        for line in f.readlines():
+    with Path(path).open(encoding="utf-8") as f:
+        for line in f:
             line = line.strip()
-            if line == '' or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
-            # A domain name is case-insensitive and
-            # consists of several labels, separated by a full stop
             domain_labels = line.lower().split('.')
             results.append(domain_labels)
 
-    # Sort results by domain labels' length
     results.sort(key=len)
     return results
 
-def find(labelses, removedDomainFile):
-    ''' Find redundant items by a tree of top-level domain label to sub-level.
-        `tree` is like { 'com': { 'foo: { 'bar': LEAF },
-                                  'abc': LEAF },
-                         'org': ... }
-    '''
 
+def find_redundant_domains(label_sets):
     tree = {}
-    LEAF = 1
-    for labels in labelses:
+    leaf = object()
+    redundant_domains = []
+
+    for labels in label_sets:
         domain = '.'.join(labels)
-        # Init root node as current node
         node = tree
-        while len(labels) > 0:
-            label = labels.pop()
+        pending_labels = list(labels)
+
+        while pending_labels:
+            label = pending_labels.pop()
             if label in node:
-                # If child node is a LEAF node,
-                # current domain must be an existed domain or a subdomain of an existed.
-                if node[label] == LEAF:
-                    print(f"Redundant found: {domain} at {'.'.join(labels)}")
-                    with open(removedDomainFile, "a") as f:
-                        f.write(domain)
-                        f.write("\n")
+                if node[label] is leaf:
+                    redundant_domains.append(domain)
                     break
             else:
-                # Create a leaf node if current label is last one
-                if len(labels) == 0:
-                    node[label] = LEAF
-                # Create a branch node
-                else:
+                if pending_labels:
                     node[label] = {}
-            # Iterate to child node
+                else:
+                    node[label] = leaf
             node = node[label]
 
-if __name__ == '__main__':
-    find(load(sys.argv[1]), sys.argv[2])
+    return redundant_domains
+
+
+def main(argv):
+    if len(argv) != 3:
+        print(f"Usage: {argv[0]} INPUT_LIST OUTPUT_LIST", file=sys.stderr)
+        return 2
+
+    redundant_domains = find_redundant_domains(load_domains(argv[1]))
+    with Path(argv[2]).open("w", encoding="utf-8") as f:
+        for domain in redundant_domains:
+            f.write(f"{domain}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
