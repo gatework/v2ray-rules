@@ -53,24 +53,32 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: hidden
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Checkout Loyalsoldier/domain-list-custom
         uses: actions/checkout@v6
         with:
           repository: Loyalsoldier/domain-list-custom
           path: custom
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Checkout v2fly/domain-list-community
         uses: actions/checkout@v6
         with:
           repository: v2fly/domain-list-community
           path: community
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Checkout cokebar/gfwlist2dnsmasq
         uses: actions/checkout@v6
         with:
           repository: cokebar/gfwlist2dnsmasq
           path: gfwlist2dnsmasq
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -236,7 +244,7 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b release
           git add .
-          git commit -m "${{ env.RELEASE_NAME }}"
+          git commit --allow-empty -m "${{ env.RELEASE_NAME }}"
           git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f -u origin release
 
