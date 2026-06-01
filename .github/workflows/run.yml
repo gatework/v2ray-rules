@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.repository }}
   cancel-in-progress: true
 
 defaults:
@@ -43,7 +43,7 @@ jobs:
     steps:
       - name: Set release metadata
         run: |
-          release_time="$(date +%Y%m%d%H%M)"
+          release_time="$(date +%Y%m%d%H%M%S)"
           {
             echo "RELEASE_NAME=Released on ${release_time}"
             echo "TAG_NAME=${release_time}"
@@ -78,6 +78,20 @@ jobs:
           go-version-file: ./custom/go.mod
           cache-dependency-path: ./custom/go.sum
 
+      - name: Cache upstream list sources
+        run: |
+          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" > china-domains.conf
+          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" > google-domains.conf
+          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" > apple-domains.conf
+          curl ${CURL_FLAGS} "${CUSTOM_DIRECT}" > domain-list-custom-cn.txt
+          curl ${CURL_FLAGS} "${CUSTOM_PROXY}" > domain-list-custom-geolocation-cn.txt
+          curl ${CURL_FLAGS} "${WIN_SPY}" > win-spy-hosts.txt
+          curl ${CURL_FLAGS} "${WIN_UPDATE}" > win-update-hosts.txt
+          curl ${CURL_FLAGS} "${WIN_EXTRA}" > win-extra-hosts.txt
+          for file in china-domains.conf google-domains.conf apple-domains.conf domain-list-custom-cn.txt domain-list-custom-geolocation-cn.txt win-spy-hosts.txt win-update-hosts.txt win-extra-hosts.txt; do
+            test -s "${file}"
+          done
+
       - name: Get geoip.dat relative files
         run: |
           curl ${CURL_FLAGS} --output geoip.dat https://github.com/Loyalsoldier/geoip/raw/release/geoip.dat
@@ -92,16 +106,16 @@ jobs:
 
       - name: Get and add direct domains into temp-direct.txt file
         run: |
-          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > temp-direct.txt
-          curl ${CURL_FLAGS} "${CUSTOM_DIRECT}" | perl -ne '/^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-direct.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' china-domains.conf > temp-direct.txt
+          perl -ne '/^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' domain-list-custom-cn.txt >> temp-direct.txt
           test -s temp-direct.txt
 
       - name: Get and add proxy domains into temp-proxy.txt file
         run: |
           perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' ./gfwlist2dnsmasq/temp-gfwlist.txt > temp-proxy.txt
-          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
-          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
-          curl ${CURL_FLAGS} "${CUSTOM_PROXY}" | perl -ne 'next if /:\@cn/; /^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-proxy.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' google-domains.conf >> temp-proxy.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' apple-domains.conf >> temp-proxy.txt
+          perl -ne 'next if /:\@cn/; /^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' domain-list-custom-geolocation-cn.txt >> temp-proxy.txt
           test -s temp-proxy.txt
 
       - name: Get and add reject domains into temp-reject.txt file
@@ -114,8 +128,8 @@ jobs:
 
       - name: Reserve `full`, `regexp` and `keyword` type of rules from custom lists to "reserve" files
         run: |
-          curl ${CURL_FLAGS} "${CUSTOM_DIRECT}" | perl -ne '/^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > direct-reserve.txt
-          curl ${CURL_FLAGS} "${CUSTOM_PROXY}" | perl -ne 'next if /:\@cn/; /^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > proxy-reserve.txt
+          perl -ne '/^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' domain-list-custom-cn.txt | sort --ignore-case -u > direct-reserve.txt
+          perl -ne 'next if /:\@cn/; /^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' domain-list-custom-geolocation-cn.txt | sort --ignore-case -u > proxy-reserve.txt
 
       - name: Add proxy, direct and reject domains from "hidden" branch to appropriate temp files
         run: |
@@ -171,21 +185,21 @@ jobs:
 
       - name: Create `china-list`、`google-cn`、`apple-cn`、`gfw`、`greatfire` lists
         run: |
-          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > ./community/data/china-list
-          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > china-list.txt
-          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/google-cn
-          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > google-cn.txt
-          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/apple-cn
-          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > apple-cn.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' china-domains.conf > ./community/data/china-list
+          perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' china-domains.conf > china-list.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' google-domains.conf > ./community/data/google-cn
+          perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' google-domains.conf > google-cn.txt
+          perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' apple-domains.conf > ./community/data/apple-cn
+          perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' apple-domains.conf > apple-cn.txt
           perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' ./gfwlist2dnsmasq/temp-gfwlist.txt >> ./community/data/gfw
           sort --ignore-case -u ./community/data/gfw > gfw.txt
           sort --ignore-case -u ./community/data/greatfire > greatfire.txt
-          curl ${CURL_FLAGS} "${WIN_SPY}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-spy
-          curl ${CURL_FLAGS} "${WIN_SPY}" | grep "0.0.0.0" | awk '{print $2}' > win-spy.txt
-          curl ${CURL_FLAGS} "${WIN_UPDATE}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-update
-          curl ${CURL_FLAGS} "${WIN_UPDATE}" | grep "0.0.0.0" | awk '{print $2}' > win-update.txt
-          curl ${CURL_FLAGS} "${WIN_EXTRA}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-extra
-          curl ${CURL_FLAGS} "${WIN_EXTRA}" | grep "0.0.0.0" | awk '{print $2}' > win-extra.txt
+          grep "0.0.0.0" win-spy-hosts.txt | awk '{print $2}' > ./community/data/win-spy
+          grep "0.0.0.0" win-spy-hosts.txt | awk '{print $2}' > win-spy.txt
+          grep "0.0.0.0" win-update-hosts.txt | awk '{print $2}' > ./community/data/win-update
+          grep "0.0.0.0" win-update-hosts.txt | awk '{print $2}' > win-update.txt
+          grep "0.0.0.0" win-extra-hosts.txt | awk '{print $2}' > ./community/data/win-extra
+          grep "0.0.0.0" win-extra-hosts.txt | awk '{print $2}' > win-extra.txt
 
       - name: Build geosite.dat file
         run: |
