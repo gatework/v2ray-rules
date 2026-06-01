@@ -22,6 +22,7 @@ defaults:
 
 env:
   TZ: Asia/Shanghai
+  LC_ALL: C
   CURL_FLAGS: "--fail --location --retry 3 --retry-delay 2 --retry-all-errors --show-error --silent"
   CHINA_DOMAINS_URL: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
   GOOGLE_DOMAINS_URL: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf"
