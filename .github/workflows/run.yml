@@ -86,6 +86,7 @@ jobs:
         with:
           go-version-file: ./custom/go.mod
           cache-dependency-path: ./custom/go.sum
+          cache: true
 
       - name: Cache upstream list sources
         run: |
