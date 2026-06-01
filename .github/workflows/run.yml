@@ -1,4 +1,5 @@
 name: Build V2Ray rules dat files
+
 on:
   workflow_dispatch:
   schedule:
@@ -10,27 +11,43 @@ on:
       - "**/README.md"
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: "bash --noprofile --norc -eo pipefail {0}"
+
+env:
+  TZ: Asia/Shanghai
+  CURL_FLAGS: "--fail --location --retry 3 --retry-delay 2 --retry-all-errors --show-error --silent"
+  CHINA_DOMAINS_URL: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
+  GOOGLE_DOMAINS_URL: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf"
+  APPLE_DOMAINS_URL: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/apple.china.conf"
+  EASYLISTCHINA_EASYLIST_REJECT_URL: "https://easylist-downloads.adblockplus.org/easylistchina+easylist.txt"
+  PETERLOWE_REJECT_URL: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=1&mimetype=plaintext"
+  ADGUARD_DNS_REJECT_URL: "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
+  DANPOLLOCK_REJECT_URL: "https://someonewhocares.org/hosts/hosts"
+  CUSTOM_DIRECT: "https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/cn.txt"
+  CUSTOM_PROXY: "https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/geolocation-!cn.txt"
+  WIN_SPY: "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt"
+  WIN_UPDATE: "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/update.txt"
+  WIN_EXTRA: "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/extra.txt"
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - name: Set variables
+      - name: Set release metadata
         run: |
-          echo "RELEASE_NAME=Released on $(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "CHINA_DOMAINS_URL=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf" >> $GITHUB_ENV
-          echo "GOOGLE_DOMAINS_URL=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf" >> $GITHUB_ENV
-          echo "APPLE_DOMAINS_URL=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/apple.china.conf" >> $GITHUB_ENV
-          echo "EASYLISTCHINA_EASYLIST_REJECT_URL=https://easylist-downloads.adblockplus.org/easylistchina+easylist.txt" >> $GITHUB_ENV
-          echo "PETERLOWE_REJECT_URL=https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=1&mimetype=plaintext" >> $GITHUB_ENV
-          echo "ADGUARD_DNS_REJECT_URL=https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt" >> $GITHUB_ENV
-          echo "DANPOLLOCK_REJECT_URL=https://someonewhocares.org/hosts/hosts" >> $GITHUB_ENV
-          echo "CUSTOM_DIRECT=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/cn.txt" >> $GITHUB_ENV
-          echo "CUSTOM_PROXY=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/geolocation-!cn.txt" >> $GITHUB_ENV
-          echo "WIN_SPY=https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt" >> $GITHUB_ENV
-          echo "WIN_UPDATE=https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/update.txt" >> $GITHUB_ENV
-          echo "WIN_EXTRA=https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/extra.txt" >> $GITHUB_ENV
-        shell: bash
+          release_time="$(date +%Y%m%d%H%M)"
+          {
+            echo "RELEASE_NAME=Released on ${release_time}"
+            echo "TAG_NAME=${release_time}"
+          } >> "${GITHUB_ENV}"
 
       - name: Checkout the "hidden" branch of this repo
         uses: actions/checkout@v6
@@ -63,8 +80,9 @@ jobs:
 
       - name: Get geoip.dat relative files
         run: |
-          wget https://github.com/Loyalsoldier/geoip/raw/release/geoip.dat
-          wget https://github.com/Loyalsoldier/geoip/raw/release/geoip.dat.sha256sum
+          curl ${CURL_FLAGS} --output geoip.dat https://github.com/Loyalsoldier/geoip/raw/release/geoip.dat
+          curl ${CURL_FLAGS} --output geoip.dat.sha256sum https://github.com/Loyalsoldier/geoip/raw/release/geoip.dat.sha256sum
+          sha256sum --check geoip.dat.sha256sum
 
       - name: Generate GFWList domains
         run: |
@@ -74,27 +92,30 @@ jobs:
 
       - name: Get and add direct domains into temp-direct.txt file
         run: |
-          curl -sSL $CHINA_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > temp-direct.txt
-          curl -sSL ${CUSTOM_DIRECT} | perl -ne '/^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-direct.txt
+          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > temp-direct.txt
+          curl ${CURL_FLAGS} "${CUSTOM_DIRECT}" | perl -ne '/^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-direct.txt
+          test -s temp-direct.txt
 
       - name: Get and add proxy domains into temp-proxy.txt file
         run: |
-          cat ./gfwlist2dnsmasq/temp-gfwlist.txt | perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' > temp-proxy.txt
-          curl -sSL $GOOGLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
-          curl -sSL $APPLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
-          curl -sSL ${CUSTOM_PROXY} | grep -Ev ":@cn" | perl -ne '/^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-proxy.txt
+          perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' ./gfwlist2dnsmasq/temp-gfwlist.txt > temp-proxy.txt
+          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
+          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' >> temp-proxy.txt
+          curl ${CURL_FLAGS} "${CUSTOM_PROXY}" | perl -ne 'next if /:\@cn/; /^(domain):([^:]+)(\n$|:@.+)/ && print "$2\n"' >> temp-proxy.txt
+          test -s temp-proxy.txt
 
       - name: Get and add reject domains into temp-reject.txt file
         run: |
-          curl -sSL $EASYLISTCHINA_EASYLIST_REJECT_URL | perl -ne '/^\|\|([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})\^$/ && print "$1\n"' | perl -ne 'print if not /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/' > temp-reject.txt
-          curl -sSL $ADGUARD_DNS_REJECT_URL | perl -ne '/^\|\|([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})\^$/ && print "$1\n"' | perl -ne 'print if not /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/' >> temp-reject.txt
-          curl -sSL $PETERLOWE_REJECT_URL | perl -ne '/^127\.0\.0\.1\s([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})$/ && print "$1\n"' >> temp-reject.txt
-          curl -sSL $DANPOLLOCK_REJECT_URL | perl -ne '/^127\.0\.0\.1\s([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})/ && print "$1\n"' | sed '1d' >> temp-reject.txt
+          curl ${CURL_FLAGS} "${EASYLISTCHINA_EASYLIST_REJECT_URL}" | perl -ne '/^\|\|([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})\^$/ && print "$1\n"' | perl -ne 'print if not /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/' > temp-reject.txt
+          curl ${CURL_FLAGS} "${ADGUARD_DNS_REJECT_URL}" | perl -ne '/^\|\|([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})\^$/ && print "$1\n"' | perl -ne 'print if not /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/' >> temp-reject.txt
+          curl ${CURL_FLAGS} "${PETERLOWE_REJECT_URL}" | perl -ne '/^127\.0\.0\.1\s([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})$/ && print "$1\n"' >> temp-reject.txt
+          curl ${CURL_FLAGS} "${DANPOLLOCK_REJECT_URL}" | perl -ne '/^127\.0\.0\.1\s([-_0-9a-zA-Z]+(\.[-_0-9a-zA-Z]+){1,64})/ && print "$1\n"' | sed '1d' >> temp-reject.txt
+          test -s temp-reject.txt
 
       - name: Reserve `full`, `regexp` and `keyword` type of rules from custom lists to "reserve" files
         run: |
-          curl -sSL ${CUSTOM_DIRECT} | perl -ne '/^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > direct-reserve.txt
-          curl -sSL ${CUSTOM_PROXY} | grep -Ev ":@cn" | perl -ne '/^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > proxy-reserve.txt
+          curl ${CURL_FLAGS} "${CUSTOM_DIRECT}" | perl -ne '/^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > direct-reserve.txt
+          curl ${CURL_FLAGS} "${CUSTOM_PROXY}" | perl -ne 'next if /:\@cn/; /^((full|regexp|keyword):[^:]+)(\n$|:@.+)/ && print "$1\n"' | sort --ignore-case -u > proxy-reserve.txt
 
       - name: Add proxy, direct and reject domains from "hidden" branch to appropriate temp files
         run: |
@@ -104,9 +125,9 @@ jobs:
 
       - name: Sort and generate redundant lists
         run: |
-          cat temp-proxy.txt | sort --ignore-case -u > proxy-list-with-redundant
-          cat temp-direct.txt | sort --ignore-case -u > direct-list-with-redundant
-          cat temp-reject.txt | sort --ignore-case -u > reject-list-with-redundant
+          sort --ignore-case -u temp-proxy.txt > proxy-list-with-redundant
+          sort --ignore-case -u temp-direct.txt > direct-list-with-redundant
+          sort --ignore-case -u temp-reject.txt > reject-list-with-redundant
 
       - name: Remove redundant domains
         run: |
@@ -120,24 +141,24 @@ jobs:
           sort ./direct-list-deleted-unsort > ./direct-list-deleted-sort
           sort ./proxy-list-deleted-unsort > ./proxy-list-deleted-sort
           sort ./reject-list-deleted-unsort > ./reject-list-deleted-sort
-          diff ./direct-list-deleted-sort ./direct-list-with-redundant | awk '/^>/{print $2}' > ./direct-list-without-redundant
-          diff ./proxy-list-deleted-sort ./proxy-list-with-redundant | awk '/^>/{print $2}' > ./proxy-list-without-redundant
-          diff ./reject-list-deleted-sort ./reject-list-with-redundant | awk '/^>/{print $2}' > ./reject-list-without-redundant
+          awk 'NR==FNR { deleted[$0]=1; next } !($0 in deleted)' ./direct-list-deleted-sort ./direct-list-with-redundant > ./direct-list-without-redundant
+          awk 'NR==FNR { deleted[$0]=1; next } !($0 in deleted)' ./proxy-list-deleted-sort ./proxy-list-with-redundant > ./proxy-list-without-redundant
+          awk 'NR==FNR { deleted[$0]=1; next } !($0 in deleted)' ./reject-list-deleted-sort ./reject-list-with-redundant > ./reject-list-without-redundant
 
       - name: Remove domains from "need-to-remove" lists in "hidden" branch
         run: |
-          diff ./direct-need-to-remove.txt ./direct-list-without-redundant | awk '/^>/{print $2}' > temp-cn.txt
-          diff ./proxy-need-to-remove.txt ./proxy-list-without-redundant | awk '/^>/{print $2}' > temp-geolocation-\!cn.txt
-          diff ./reject-need-to-remove.txt ./reject-list-without-redundant | awk '/^>/{print $2}' > temp-category-ads-all.txt
+          awk 'NR==FNR { remove[$0]=1; next } !($0 in remove)' ./direct-need-to-remove.txt ./direct-list-without-redundant > temp-cn.txt
+          awk 'NR==FNR { remove[$0]=1; next } !($0 in remove)' ./proxy-need-to-remove.txt ./proxy-list-without-redundant > temp-geolocation-\!cn.txt
+          awk 'NR==FNR { remove[$0]=1; next } !($0 in remove)' ./reject-need-to-remove.txt ./reject-list-without-redundant > temp-category-ads-all.txt
 
       - name: Write lists to data directory
         run: |
-          cat temp-cn.txt | sort --ignore-case -u | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/cn
-          cat temp-cn.txt | sort --ignore-case -u | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > direct-tld-list.txt
-          cat temp-geolocation-\!cn.txt | sort --ignore-case -u | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/geolocation-\!cn
-          cat temp-geolocation-\!cn.txt | sort --ignore-case -u | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > proxy-tld-list.txt
-          cat temp-category-ads-all.txt | sort --ignore-case -u | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/category-ads-all
-          cat temp-category-ads-all.txt | sort --ignore-case -u | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > reject-tld-list.txt
+          sort --ignore-case -u temp-cn.txt | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/cn
+          sort --ignore-case -u temp-cn.txt | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > direct-tld-list.txt
+          sort --ignore-case -u temp-geolocation-\!cn.txt | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/geolocation-\!cn
+          sort --ignore-case -u temp-geolocation-\!cn.txt | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > proxy-tld-list.txt
+          sort --ignore-case -u temp-category-ads-all.txt | perl -ne '/^((?=^.{1,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})*)/ && print "$1\n"' > ./community/data/category-ads-all
+          sort --ignore-case -u temp-category-ads-all.txt | perl -ne 'print if not /^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/' > reject-tld-list.txt
 
       - name: Add `full`, `regexp` and `keyword` type of rules back into "cn", "geolocation-!cn" and "category-ads-all" list
         run: |
@@ -150,21 +171,21 @@ jobs:
 
       - name: Create `china-list`、`google-cn`、`apple-cn`、`gfw`、`greatfire` lists
         run: |
-          curl -sSL $CHINA_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > ./community/data/china-list
-          curl -sSL $CHINA_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > china-list.txt
-          curl -sSL $GOOGLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/google-cn
-          curl -sSL $GOOGLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > google-cn.txt
-          curl -sSL $APPLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/apple-cn
-          curl -sSL $APPLE_DOMAINS_URL | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > apple-cn.txt
-          cat ./gfwlist2dnsmasq/temp-gfwlist.txt | perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' >> ./community/data/gfw
-          cat ./community/data/gfw | sort --ignore-case -u > gfw.txt
-          cat ./community/data/greatfire | sort --ignore-case -u > greatfire.txt
-          curl -sSL $WIN_SPY | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-spy
-          curl -sSL $WIN_SPY | grep "0.0.0.0" | awk '{print $2}' > win-spy.txt
-          curl -sSL $WIN_UPDATE | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-update
-          curl -sSL $WIN_UPDATE | grep "0.0.0.0" | awk '{print $2}' > win-update.txt
-          curl -sSL $WIN_EXTRA | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-extra
-          curl -sSL $WIN_EXTRA | grep "0.0.0.0" | awk '{print $2}' > win-extra.txt
+          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > ./community/data/china-list
+          curl ${CURL_FLAGS} "${CHINA_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "$1\n"' > china-list.txt
+          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/google-cn
+          curl ${CURL_FLAGS} "${GOOGLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > google-cn.txt
+          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > ./community/data/apple-cn
+          curl ${CURL_FLAGS} "${APPLE_DOMAINS_URL}" | perl -ne '/^server=\/([^\/]+)\// && print "full:$1\n"' > apple-cn.txt
+          perl -ne '/^((?=^.{3,255})[a-zA-Z0-9][-_a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-_a-zA-Z0-9]{0,62})+)/ && print "$1\n"' ./gfwlist2dnsmasq/temp-gfwlist.txt >> ./community/data/gfw
+          sort --ignore-case -u ./community/data/gfw > gfw.txt
+          sort --ignore-case -u ./community/data/greatfire > greatfire.txt
+          curl ${CURL_FLAGS} "${WIN_SPY}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-spy
+          curl ${CURL_FLAGS} "${WIN_SPY}" | grep "0.0.0.0" | awk '{print $2}' > win-spy.txt
+          curl ${CURL_FLAGS} "${WIN_UPDATE}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-update
+          curl ${CURL_FLAGS} "${WIN_UPDATE}" | grep "0.0.0.0" | awk '{print $2}' > win-update.txt
+          curl ${CURL_FLAGS} "${WIN_EXTRA}" | grep "0.0.0.0" | awk '{print $2}' > ./community/data/win-extra
+          curl ${CURL_FLAGS} "${WIN_EXTRA}" | grep "0.0.0.0" | awk '{print $2}' > win-extra.txt
 
       - name: Build geosite.dat file
         run: |
@@ -208,6 +229,6 @@ jobs:
       - name: Purge jsdelivr CDN
         run: |
           cd publish || exit 1
-          for file in $(ls); do
-            curl -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${file}"
+          find . -maxdepth 1 -type f -printf '%f\n' | sort | while IFS= read -r file; do
+            curl ${CURL_FLAGS} --include "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${file}"
           done
