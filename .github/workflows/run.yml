@@ -229,6 +229,39 @@ jobs:
           sha256sum geosite.dat > geosite.dat.sha256sum
           sha256sum rules.zip > rules.zip.sha256sum
 
+      - name: Validate generated files
+        run: |
+          ensure_non_empty() {
+            if [ ! -s "$1" ]; then
+              echo "::error::Build output file missing or empty: $1"
+              exit 1
+            fi
+          }
+
+          ensure_non_empty ./publish/geoip.dat
+          ensure_non_empty ./publish/geoip.dat.sha256sum
+          ensure_non_empty ./publish/geosite.dat
+          ensure_non_empty ./publish/geosite.dat.sha256sum
+          ensure_non_empty ./publish/rules.zip
+          ensure_non_empty ./publish/rules.zip.sha256sum
+          ensure_non_empty ./publish/direct-list.txt
+          ensure_non_empty ./publish/proxy-list.txt
+          ensure_non_empty ./publish/reject-list.txt
+          ensure_non_empty ./publish/direct-tld-list.txt
+          ensure_non_empty ./publish/proxy-tld-list.txt
+          ensure_non_empty ./publish/reject-tld-list.txt
+          ensure_non_empty ./publish/china-list.txt
+          ensure_non_empty ./publish/google-cn.txt
+          ensure_non_empty ./publish/apple-cn.txt
+          ensure_non_empty ./publish/gfw.txt
+          ensure_non_empty ./publish/greatfire.txt
+          ensure_non_empty ./publish/win-spy.txt
+          ensure_non_empty ./publish/win-update.txt
+          ensure_non_empty ./publish/win-extra.txt
+          # quick checksum sanity check for release files
+          cd ./publish || exit 1
+          sha256sum --check geoip.dat.sha256sum
+
       - name: Release and upload assets
         uses: svenstaro/upload-release-action@v2
         with:
