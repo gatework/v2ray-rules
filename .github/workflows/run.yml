@@ -51,14 +51,14 @@ jobs:
           } >> "${GITHUB_ENV}"
 
       - name: Checkout the "hidden" branch of this repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: hidden
           fetch-depth: 1
           persist-credentials: false
 
       - name: Checkout Loyalsoldier/domain-list-custom
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Loyalsoldier/domain-list-custom
           path: custom
@@ -66,7 +66,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout v2fly/domain-list-community
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: v2fly/domain-list-community
           path: community
@@ -74,7 +74,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout cokebar/gfwlist2dnsmasq
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: cokebar/gfwlist2dnsmasq
           path: gfwlist2dnsmasq
